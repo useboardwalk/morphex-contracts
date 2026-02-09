@@ -15,7 +15,7 @@ const additionalRevenueSources = {
   basedMediaXETH: "0", // set this, 18 decimals
   // following chain configs are to track revenue bridged from other chains to base
   sonic: {
-    stakingIncentivesETH: "26406530759883000",
+    stakingIncentivesETH: "0",
   },
 };
 const USER_ADDRESS = "0xB1dD2Fdb023cB54b7cc2a0f5D9e8d47a9F7723ce";

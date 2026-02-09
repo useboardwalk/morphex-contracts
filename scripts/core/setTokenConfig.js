@@ -22,8 +22,8 @@ async function getBaseValues() {
     "0x92C97631450E804848781C0764907Ec4FC6fFd29"
   );
 
-  const { eth, cbbtc, aero, well, usdc, usdcCircle, eurc } = tokens;
-  const tokenArr = [eth, cbbtc, aero, well, usdc, usdcCircle, eurc];
+  const { eth, cbbtc, usdcCircle } = tokens;
+  const tokenArr = [eth, cbbtc, usdcCircle];
 
   const vaultTokenInfo = await reader.getVaultTokenInfoV2(
     vault.address,
