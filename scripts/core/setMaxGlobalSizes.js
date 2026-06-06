@@ -35,8 +35,8 @@ async function getBaseValues() {
     "0xFcC1f41210D9E8119F3Db7dbb077695Fc6791125" // PositionManager
   ]
 
-  const { eth, cbbtc, aero, well } = tokens
-  const tokenArr = [eth, cbbtc, aero, well]
+  const { eth, cbbtc } = tokens
+  const tokenArr = [eth, cbbtc]
 
   return { positionContracts, tokenArr }
 }

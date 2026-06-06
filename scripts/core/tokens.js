@@ -183,11 +183,11 @@ module.exports = {
       tokenWeight: 20000,
       minProfitBps: 0,
       maxUsdgAmount: 2 * 1000 * 1000,
-      bufferAmount: 60,
+      bufferAmount: 5,
       isStable: false,
       isShortable: true,
-      maxGlobalLongSize: 225 * 1000,
-      maxGlobalShortSize: 75 * 1000
+      maxGlobalLongSize: 3000,
+      maxGlobalShortSize: 1
     },
     cbbtc: {
       name: "cbbtc",
@@ -201,11 +201,11 @@ module.exports = {
       tokenWeight: 30000,
       minProfitBps: 0,
       maxUsdgAmount: 2 * 1000 * 1000,
-      bufferAmount: 3,
+      bufferAmount: 1,
       isStable: false,
       isShortable: true,
-      maxGlobalLongSize: 225 * 1000,
-      maxGlobalShortSize: 75 * 1000,
+      maxGlobalLongSize: 1,
+      maxGlobalShortSize: 1,
     },
     aero: {
       name: "aero",
@@ -267,7 +267,7 @@ module.exports = {
       tokenWeight: 50000,
       minProfitBps: 0,
       maxUsdgAmount: 775 * 1000,
-      bufferAmount: 500 * 1000,
+      bufferAmount: 200 * 1000,
       isStable: true,
       isShortable: false,
     },

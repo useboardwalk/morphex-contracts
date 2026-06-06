@@ -20,7 +20,7 @@ interface IVoter {
 
 /**
  * @title RewardRouterV5
- * @dev Implements reward handling for staking and providing liquidity.
+ * @dev Implements reward handling for staking.
  */
 contract RewardRouterV5 is ReentrancyGuard, Governable {
     using SafeMath for uint256;
@@ -29,82 +29,66 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
 
     bool public isInitialized;
 
-    address public ws;
+    address public weth;
     address public bmx;
     address public bnBmx; // multiplier points
-    address public slt; // BMX Liquidity Provider token
 
     address public stakedBmxTracker;
     address public bonusBmxTracker;
     address public feeBmxTracker;
-    address public stakedSltTracker;
-    address public feeSltTracker;
 
-    address public sltManager;
     address public voter; // Used to check if voter epoch finalization is in progress
+
+    mapping (address => address) public pendingReceivers;
 
     // Keeping original event names so subgraphs don't need to be updated
     event StakeGmx(address account, address token, uint256 amount);
     event UnstakeGmx(address account, address token, uint256 amount);
-    event StakeGlp(address account, uint256 amount);
-    event UnstakeGlp(address account, uint256 amount);
 
     /**
      * @notice Handles receiving ETH directly to the contract.
-     * Reverts if the sender is not the wS contract.
+     * Reverts if the sender is not the wETH contract.
      */
     receive() external payable {
-        require(msg.sender == ws, "Router: invalid sender");
+        require(msg.sender == weth, "Router: invalid sender");
     }
 
     /**
      * @notice Initializes the contract with provided addresses.
      * Can only be called once by governance.
-     * @param _ws Address of the Wrapped ETH token.
+     * @param _weth Address of the Wrapped ETH token.
      * @param _bmx Address of the BMX token.
      * @param _bnBmx Address of the multiplier points token.
-     * @param _slt Address of the BMX Liquidity Provider token.
      * @param _stakedBmxTracker Address of the staked BMX tracker contract.
      * @param _bonusBmxTracker Address of the bonus BMX tracker contract.
      * @param _feeBmxTracker Address of the fee BMX tracker contract.
-     * @param _feeSltTracker Address of the fee SLT tracker contract.
-     * @param _stakedSltTracker Address of the staked SLT tracker contract.
-     * @param _sltManager Address of the SLT manager contract.
+     * @param _voter Address of the voter contract to check for epoch finalization status.
      */
     function initialize(
-        address _ws,
+        address _weth,
         address _bmx,
         address _bnBmx,
-        address _slt,
         address _stakedBmxTracker,
         address _bonusBmxTracker,
         address _feeBmxTracker,
-        address _feeSltTracker,
-        address _stakedSltTracker,
-        address _sltManager,
         address _voter
     ) external onlyGov {
         require(!isInitialized, "RewardRouter: already initialized");
         isInitialized = true;
 
-        ws = _ws;
+        weth = _weth;
         bmx = _bmx;
         bnBmx = _bnBmx;
-        slt = _slt;
 
         stakedBmxTracker = _stakedBmxTracker;
         bonusBmxTracker = _bonusBmxTracker;
         feeBmxTracker = _feeBmxTracker;
-        feeSltTracker = _feeSltTracker;
-        stakedSltTracker = _stakedSltTracker;
 
-        sltManager = _sltManager;
         voter = _voter;
     }
 
     /**
      * @notice Allows governance to withdraw tokens sent to this contract.
-     * Example: To help users who accidentally send their tokens to this contract
      * @param _token The address of the token to withdraw.
      * @param _account The address to send the token to.
      * @param _amount The amount of tokens to withdraw.
@@ -115,7 +99,6 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
 
     /**
      * @notice Stakes BMX for multiple accounts.
-     * @dev This function allows batch staking of BMX for different accounts. Can only be called by governance.
      * @param _accounts Array of addresses for which BMX tokens are to be staked.
      * @param _amounts Array of amounts of BMX tokens to be staked for each corresponding account in `_accounts`.
      */
@@ -128,7 +111,6 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
 
     /**
      * @notice Stakes BMX on behalf of a specified account.
-     * @dev This function allows governance to stake BMX for a specified account. Can only be called by governance.
      * @param _account The address of the account for which BMX tokens are to be staked.
      * @param _amount The amount of BMX tokens to stake.
      */
@@ -138,8 +120,6 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
 
     /**
      * @notice Allows a user to stake their BMX.
-     * @dev This function lets an account stake BMX tokens for itself.
-     * Calls `_stakeBmx` internally.
      * @param _amount The amount of BMX tokens the user wishes to stake.
      */
     function stakeBmx(uint256 _amount) external nonReentrant {
@@ -148,8 +128,6 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
 
     /**
      * @notice Allows a user to unstake their BMX.
-     * @dev This function lets an account unstake BMX tokens that it has previously staked.
-     * Calls `_unstakeBmx` internally.
      * @param _amount The amount of BMX tokens the user wishes to unstake.
      */
     function unstakeBmx(uint256 _amount) external nonReentrant {
@@ -157,155 +135,54 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
     }
 
     /**
-     * @notice Mints and stakes SLT.
-     * @dev Allows a user to mint SLT using an underlying token and then stakes the resulting SLT.
-     * @param _token The address of the token to be used for minting SLT.
-     * @param _amount The amount of the token to mint SLT with.
-     * @param _minUsd The minimum USD value expected to receive.
-     * @param _minSlt The minimum SLT tokens expected to receive.
-     * @return sltAmount The amount of SLT tokens staked.
-     */
-    function mintAndStakeSlt(address _token, uint256 _amount, uint256 _minUsd, uint256 _minSlt) external nonReentrant returns (uint256) {
-        require(_amount > 0, "RewardRouter: invalid _amount");
-
-        address account = msg.sender;
-        uint256 sltAmount = IGlpManager(sltManager).addLiquidityForAccount(account, account, _token, _amount, _minUsd, _minSlt);
-        IRewardTracker(feeSltTracker).stakeForAccount(account, account, slt, sltAmount);
-        IRewardTracker(stakedSltTracker).stakeForAccount(account, account, feeSltTracker, sltAmount);
-
-        emit StakeGlp(account, sltAmount);
-
-        return sltAmount;
-    }
-
-    /**
-     * @notice Mints and stakes SLT with ETH.
-     * @dev Allows a user to mint SLT with ETH and then stakes the resulting SLT.
-     * @param _minUsd The minimum USD value expected to receive.
-     * @param _minSlt The minimum SLT tokens expected to receive.
-     * @return sltAmount The amount of SLT tokens staked.
-     */
-    function mintAndStakeSltETH(uint256 _minUsd, uint256 _minSlt) external payable nonReentrant returns (uint256) {
-        require(msg.value > 0, "RewardRouter: invalid msg.value");
-
-        IWETH(ws).deposit{value: msg.value}();
-        IERC20(ws).approve(sltManager, msg.value);
-
-        address account = msg.sender;
-        uint256 sltAmount = IGlpManager(sltManager).addLiquidityForAccount(address(this), account, ws, msg.value, _minUsd, _minSlt);
-
-        IRewardTracker(feeSltTracker).stakeForAccount(account, account, slt, sltAmount);
-        IRewardTracker(stakedSltTracker).stakeForAccount(account, account, feeSltTracker, sltAmount);
-
-        emit StakeGlp(account, sltAmount);
-
-        return sltAmount;
-    }
-
-    /**
-     * @notice Unstakes and redeems SLT for an underlying token.
-     * @dev Allows a user to unstake SLT tokens and redeem them for an underlying token.
-     * @param _tokenOut The address of the underlying token to receive.
-     * @param _sltAmount The amount of SLT tokens to unstake and redeem.
-     * @param _minOut The minimum amount of the underlying token expected to receive.
-     * @param _receiver The address that will receive the underlying tokens.
-     * @return amountOut The amount of the underlying tokens received.
-     */
-    function unstakeAndRedeemSlt(address _tokenOut, uint256 _sltAmount, uint256 _minOut, address _receiver) external nonReentrant returns (uint256) {
-        require(_sltAmount > 0, "RewardRouter: invalid _sltAmount");
-
-        address account = msg.sender;
-        IRewardTracker(stakedSltTracker).unstakeForAccount(account, feeSltTracker, _sltAmount, account);
-        IRewardTracker(feeSltTracker).unstakeForAccount(account, slt, _sltAmount, account);
-        uint256 amountOut = IGlpManager(sltManager).removeLiquidityForAccount(account, _tokenOut, _sltAmount, _minOut, _receiver);
-
-        emit UnstakeGlp(account, _sltAmount);
-
-        return amountOut;
-    }
-
-    /**
-     * @notice Unstakes and redeems SLT for ETH.
-     * @dev Allows a user to unstake SLT tokens and redeem them for ETH.
-     * @param _sltAmount The amount of SLT tokens to unstake and redeem.
-     * @param _minOut The minimum amount of ETH expected to receive.
-     * @param _receiver The address that will receive the ETH.
-     * @return amountOut The amount of ETH received.
-     */
-    function unstakeAndRedeemSltETH(uint256 _sltAmount, uint256 _minOut, address payable _receiver) external nonReentrant returns (uint256) {
-        require(_sltAmount > 0, "RewardRouter: invalid _sltAmount");
-
-        address account = msg.sender;
-        IRewardTracker(stakedSltTracker).unstakeForAccount(account, feeSltTracker, _sltAmount, account);
-        IRewardTracker(feeSltTracker).unstakeForAccount(account, slt, _sltAmount, account);
-        uint256 amountOut = IGlpManager(sltManager).removeLiquidityForAccount(account, ws, _sltAmount, _minOut, address(this));
-
-        IWETH(ws).withdraw(amountOut);
-
-        _receiver.sendValue(amountOut);
-
-        emit UnstakeGlp(account, _sltAmount);
-
-        return amountOut;
-    }
-
-    /**
-     * @notice Claims wS and BMX rewards from staking BMX and/or SLT.
-     * @dev This function allows a user to claim their rewards from all staked (BMX) and fee (wS) reward trackers.
+     * @notice Claims wETH and BMX rewards from staking BMX.
      */
     function claim() external nonReentrant {
         address account = msg.sender;
 
-        // Claim wS
+        // Claim wETH
         IRewardTracker(feeBmxTracker).claimForAccount(account, account);
-        IRewardTracker(feeSltTracker).claimForAccount(account, account);
 
         // Claim BMX
         IRewardTracker(stakedBmxTracker).claimForAccount(account, account);
-        IRewardTracker(stakedSltTracker).claimForAccount(account, account);
     }
 
     /**
-     * @notice Claims BMX rewards from staking BMX and/or SLT.
-     * @dev This function allows a user to claim their rewards from all staked reward trackers.
+     * @notice Claims BMX rewards from staking BMX.
      */
     function claimBmx() external nonReentrant {
         address account = msg.sender;
 
         IRewardTracker(stakedBmxTracker).claimForAccount(account, account);
-        IRewardTracker(stakedSltTracker).claimForAccount(account, account);
     }
 
     /**
-     * @notice Claims wS rewards from staking BMX and/or SLT.
-     * @dev This function allows a user to claim their rewards from all fee reward trackers.
+     * @notice Claims wETH rewards from staking BMX.
      */
     function claimFees() external nonReentrant {
         address account = msg.sender;
 
         IRewardTracker(feeBmxTracker).claimForAccount(account, account);
-        IRewardTracker(feeSltTracker).claimForAccount(account, account);
     }
 
     /**
      * @notice Handles various reward claims based on the provided params.
-     * @dev This function provides a consolidated way to handle multiple actions like claiming BMX, staking multiplier points, claiming wS, and converting wS to ETH.
+     * @dev This function provides a consolidated way to handle multiple actions like claiming BMX, staking multiplier points, claiming wETH, and converting wETH to ETH.
      * @param _shouldClaimBmx If BMX rewards should be claimed.
      * @param _shouldStakeMultiplierPoints If multiplier points should be staked.
-     * @param _shouldClaimWs If wS rewards should be claimed.
-     * @param _shouldConvertWsToS If claimed wS should be converted to ETH.
+     * @param _shouldClaimWeth If wETH rewards should be claimed.
+     * @param _shouldConvertWethToEth If claimed wETH should be converted to ETH.
      */
     function handleRewards(
         bool _shouldClaimBmx,
         bool _shouldStakeMultiplierPoints,
-        bool _shouldClaimWs,
-        bool _shouldConvertWsToS
+        bool _shouldClaimWeth,
+        bool _shouldConvertWethToEth
     ) external nonReentrant {
         address account = msg.sender;
 
         if (_shouldClaimBmx) {
             IRewardTracker(stakedBmxTracker).claimForAccount(account, account);
-            IRewardTracker(stakedSltTracker).claimForAccount(account, account);
         }
         if (_shouldStakeMultiplierPoints) {
             uint256 bnBmxAmount = IRewardTracker(bonusBmxTracker).claimForAccount(account, account);
@@ -313,18 +190,15 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
                 IRewardTracker(feeBmxTracker).stakeForAccount(account, account, bnBmx, bnBmxAmount);
             }
         }
-        if (_shouldClaimWs) {
-            if (_shouldConvertWsToS) {
-                uint256 ws0 = IRewardTracker(feeBmxTracker).claimForAccount(account, address(this));
-                uint256 ws1 = IRewardTracker(feeSltTracker).claimForAccount(account, address(this));
+        if (_shouldClaimWeth) {
+            if (_shouldConvertWethToEth) {
+                uint256 wsAmount = IRewardTracker(feeBmxTracker).claimForAccount(account, address(this));
 
-                uint256 wsAmount = ws0.add(ws1);
-                IWETH(ws).withdraw(wsAmount);
+                IWETH(weth).withdraw(wsAmount);
 
                 payable(account).sendValue(wsAmount);
             } else {
                 IRewardTracker(feeBmxTracker).claimForAccount(account, account);
-                IRewardTracker(feeSltTracker).claimForAccount(account, account);
             }
         }
     }
@@ -366,5 +240,51 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
         }
 
         emit UnstakeGmx(_account, _token, _amount);
+    }
+
+    // Account transfer functions
+
+    function signalTransfer(address _receiver) external nonReentrant {
+        _validateReceiver(_receiver);
+        pendingReceivers[msg.sender] = _receiver;
+    }
+
+    function acceptTransfer(address _sender) external nonReentrant {
+        address receiver = msg.sender;
+        require(pendingReceivers[_sender] == receiver, "RewardRouter: transfer not signalled");
+        delete pendingReceivers[_sender];
+
+        _validateReceiver(receiver);
+        _compound(_sender);
+
+        uint256 stakedBmx = IRewardTracker(stakedBmxTracker).depositBalances(_sender, bmx);
+        if (stakedBmx > 0) {
+            _unstakeBmx(_sender, bmx, stakedBmx, false);
+            _stakeBmx(_sender, receiver, bmx, stakedBmx);
+        }
+
+        uint256 stakedBnBmx = IRewardTracker(feeBmxTracker).depositBalances(_sender, bnBmx);
+        if (stakedBnBmx > 0) {
+            IRewardTracker(feeBmxTracker).unstakeForAccount(_sender, bnBmx, stakedBnBmx, _sender);
+            IRewardTracker(feeBmxTracker).stakeForAccount(_sender, receiver, bnBmx, stakedBnBmx);
+        }
+    }
+
+    function _validateReceiver(address _receiver) private view {
+        require(IRewardTracker(stakedBmxTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: stakedBmxTracker.averageStakedAmounts > 0");
+        require(IRewardTracker(stakedBmxTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: stakedBmxTracker.cumulativeRewards > 0");
+
+        require(IRewardTracker(bonusBmxTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: bonusBmxTracker.averageStakedAmounts > 0");
+        require(IRewardTracker(bonusBmxTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: bonusBmxTracker.cumulativeRewards > 0");
+
+        require(IRewardTracker(feeBmxTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: feeBmxTracker.averageStakedAmounts > 0");
+        require(IRewardTracker(feeBmxTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: feeBmxTracker.cumulativeRewards > 0");
+    }
+
+    function _compound(address _account) private {
+        uint256 bnBmxAmount = IRewardTracker(bonusBmxTracker).claimForAccount(_account, _account);
+        if (bnBmxAmount > 0) {
+            IRewardTracker(feeBmxTracker).stakeForAccount(_account, _account, bnBmx, bnBmxAmount);
+        }
     }
 }
