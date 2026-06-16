@@ -65,14 +65,20 @@ contract VaultUtils is IVaultUtils, Governable {
         uint256 marginFees = getFundingFee(_account, _collateralToken, _indexToken, _isLong, position.size, position.entryFundingRate);
         marginFees = marginFees.add(getPositionFee(_account, _collateralToken, _indexToken, _isLong, position.size));
 
-        if (!hasProfit && position.collateral < delta) {
+        // Re-value collateral for longs at the current token price;
+        // For shorts or stable collateral we keep the original snapshot value.
+        uint256 collateralUsd = !_isLong
+            ? position.collateral
+            : position.collateral.mul(vault.getMinPrice(_collateralToken)).div(position.averagePrice);
+
+        if (!hasProfit && collateralUsd < delta) {
             if (_raise) { revert("Vault: losses exceed collateral"); }
             return (1, marginFees);
         }
 
-        uint256 remainingCollateral = position.collateral;
+        uint256 remainingCollateral = collateralUsd;
         if (!hasProfit) {
-            remainingCollateral = position.collateral.sub(delta);
+            remainingCollateral = remainingCollateral.sub(delta);
         }
 
         if (remainingCollateral < marginFees) {
