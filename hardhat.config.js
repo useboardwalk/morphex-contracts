@@ -37,7 +37,10 @@ const {
   MODE_DEPLOY_KEY,
 
   SONIC_URL,
-  SONIC_DEPLOY_KEY
+  SONIC_DEPLOY_KEY,
+
+  ARB_URL,
+  ARB_DEPLOY_KEY
 } = require("./env.json")
 
 // This is a sample Hardhat task. To learn how to create your own go to
@@ -57,7 +60,7 @@ task("accounts", "Prints the list of accounts", async () => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  defaultNetwork: "base",
+  defaultNetwork: "arbitrum",
   networks: {
     localhost: {
       timeout: 120000
@@ -84,10 +87,10 @@ module.exports = {
       accounts: [ARBITRUM_TESTNET_DEPLOY_KEY]
     },
     arbitrum: {
-      url: ARBITRUM_URL,
-      gasPrice: 30000000000,
+      url: ARB_URL,
+      gasMultiplier: 1.5,
       chainId: 42161,
-      accounts: [ARBITRUM_DEPLOY_KEY]
+      accounts: [ARB_DEPLOY_KEY]
     },
     avax: {
       url: AVAX_URL,
