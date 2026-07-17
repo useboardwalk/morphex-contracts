@@ -30,16 +30,14 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
     bool public isInitialized;
 
     address public weth;
-    address public bws;
-    address public bnBws; // multiplier points
+    address public bwlk;
+    address public bnBwlk; // multiplier points
 
-    address public stakedBwsTracker;
-    address public bonusBwsTracker;
-    address public feeBwsTracker;
+    address public stakedBwlkTracker;
+    address public bonusBwlkTracker;
+    address public feeBwlkTracker;
 
     address public voter; // Used to check if voter epoch finalization is in progress
-
-    mapping (address => address) public pendingReceivers;
 
     // Keeping original event names so subgraphs don't need to be updated
     event StakeGmx(address account, address token, uint256 amount);
@@ -57,32 +55,32 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
      * @notice Initializes the contract with provided addresses.
      * Can only be called once by governance.
      * @param _weth Address of the Wrapped ETH token.
-     * @param _bws Address of the BWS token.
-     * @param _bnBws Address of the multiplier points token.
-     * @param _stakedBwsTracker Address of the staked BWS tracker contract.
-     * @param _bonusBwsTracker Address of the bonus BWS tracker contract.
-     * @param _feeBwsTracker Address of the fee BWS tracker contract.
+     * @param _bwlk Address of the BWLK token.
+     * @param _bnBwlk Address of the multiplier points token.
+     * @param _stakedBwlkTracker Address of the staked BWLK tracker contract.
+     * @param _bonusBwlkTracker Address of the bonus BWLK tracker contract.
+     * @param _feeBwlkTracker Address of the fee BWLK tracker contract.
      * @param _voter Address of the voter contract to check for epoch finalization status.
      */
     function initialize(
         address _weth,
-        address _bws,
-        address _bnBws,
-        address _stakedBwsTracker,
-        address _bonusBwsTracker,
-        address _feeBwsTracker,
+        address _bwlk,
+        address _bnBwlk,
+        address _stakedBwlkTracker,
+        address _bonusBwlkTracker,
+        address _feeBwlkTracker,
         address _voter
     ) external onlyGov {
         require(!isInitialized, "RewardRouter: already initialized");
         isInitialized = true;
 
         weth = _weth;
-        bws = _bws;
-        bnBws = _bnBws;
+        bwlk = _bwlk;
+        bnBwlk = _bnBwlk;
 
-        stakedBwsTracker = _stakedBwsTracker;
-        bonusBwsTracker = _bonusBwsTracker;
-        feeBwsTracker = _feeBwsTracker;
+        stakedBwlkTracker = _stakedBwlkTracker;
+        bonusBwlkTracker = _bonusBwlkTracker;
+        feeBwlkTracker = _feeBwlkTracker;
 
         voter = _voter;
     }
@@ -98,193 +96,147 @@ contract RewardRouterV5 is ReentrancyGuard, Governable {
     }
 
     /**
-     * @notice Stakes BWS for multiple accounts.
-     * @param _accounts Array of addresses for which BWS tokens are to be staked.
-     * @param _amounts Array of amounts of BWS tokens to be staked for each corresponding account in `_accounts`.
+     * @notice Stakes BWLK for multiple accounts.
+     * @param _accounts Array of addresses for which BWLK tokens are to be staked.
+     * @param _amounts Array of amounts of BWLK tokens to be staked for each corresponding account in `_accounts`.
      */
-    function batchStakeBwsForAccount(address[] memory _accounts, uint256[] memory _amounts) external nonReentrant onlyGov {
-        address _bws = bws;
+    function batchStakeBwlkForAccount(address[] memory _accounts, uint256[] memory _amounts) external nonReentrant onlyGov {
+        address _bwlk = bwlk;
         for (uint256 i = 0; i < _accounts.length; i++) {
-            _stakeBws(msg.sender, _accounts[i], _bws, _amounts[i]);
+            _stakeBwlk(msg.sender, _accounts[i], _bwlk, _amounts[i]);
         }
     }
 
     /**
-     * @notice Stakes BWS on behalf of a specified account.
-     * @param _account The address of the account for which BWS tokens are to be staked.
-     * @param _amount The amount of BWS tokens to stake.
+     * @notice Stakes BWLK on behalf of a specified account.
+     * @param _account The address of the account for which BWLK tokens are to be staked.
+     * @param _amount The amount of BWLK tokens to stake.
      */
-    function stakeBwsForAccount(address _account, uint256 _amount) external nonReentrant onlyGov {
-        _stakeBws(msg.sender, _account, bws, _amount);
+    function stakeBwlkForAccount(address _account, uint256 _amount) external nonReentrant onlyGov {
+        _stakeBwlk(msg.sender, _account, bwlk, _amount);
     }
 
     /**
-     * @notice Allows a user to stake their BWS.
-     * @param _amount The amount of BWS tokens the user wishes to stake.
+     * @notice Allows a user to stake their BWLK.
+     * @param _amount The amount of BWLK tokens the user wishes to stake.
      */
-    function stakeBws(uint256 _amount) external nonReentrant {
-        _stakeBws(msg.sender, msg.sender, bws, _amount);
+    function stakeBwlk(uint256 _amount) external nonReentrant {
+        _stakeBwlk(msg.sender, msg.sender, bwlk, _amount);
     }
 
     /**
-     * @notice Allows a user to unstake their BWS.
-     * @param _amount The amount of BWS tokens the user wishes to unstake.
+     * @notice Allows a user to unstake their BWLK.
+     * @param _amount The amount of BWLK tokens the user wishes to unstake.
      */
-    function unstakeBws(uint256 _amount) external nonReentrant {
-        _unstakeBws(msg.sender, bws, _amount, true);
+    function unstakeBwlk(uint256 _amount) external nonReentrant {
+        _unstakeBwlk(msg.sender, bwlk, _amount, true);
     }
 
     /**
-     * @notice Claims wETH and BWS rewards from staking BWS.
+     * @notice Claims wETH and BWLK rewards from staking BWLK.
      */
     function claim() external nonReentrant {
         address account = msg.sender;
 
         // Claim wETH
-        IRewardTracker(feeBwsTracker).claimForAccount(account, account);
+        IRewardTracker(feeBwlkTracker).claimForAccount(account, account);
 
-        // Claim BWS
-        IRewardTracker(stakedBwsTracker).claimForAccount(account, account);
+        // Claim BWLK
+        IRewardTracker(stakedBwlkTracker).claimForAccount(account, account);
     }
 
     /**
-     * @notice Claims BWS rewards from staking BWS.
+     * @notice Claims BWLK rewards from staking BWLK.
      */
-    function claimBws() external nonReentrant {
+    function claimBwlk() external nonReentrant {
         address account = msg.sender;
 
-        IRewardTracker(stakedBwsTracker).claimForAccount(account, account);
+        IRewardTracker(stakedBwlkTracker).claimForAccount(account, account);
     }
 
     /**
-     * @notice Claims wETH rewards from staking BWS.
+     * @notice Claims wETH rewards from staking BWLK.
      */
     function claimFees() external nonReentrant {
         address account = msg.sender;
 
-        IRewardTracker(feeBwsTracker).claimForAccount(account, account);
+        IRewardTracker(feeBwlkTracker).claimForAccount(account, account);
     }
 
     /**
      * @notice Handles various reward claims based on the provided params.
-     * @dev This function provides a consolidated way to handle multiple actions like claiming BWS, staking multiplier points, claiming wETH, and converting wETH to ETH.
-     * @param _shouldClaimBws If BWS rewards should be claimed.
+     * @dev This function provides a consolidated way to handle multiple actions like claiming BWLK, staking multiplier points, claiming wETH, and converting wETH to ETH.
+     * @param _shouldClaimBwlk If BWLK rewards should be claimed.
      * @param _shouldStakeMultiplierPoints If multiplier points should be staked.
      * @param _shouldClaimWeth If wETH rewards should be claimed.
      * @param _shouldConvertWethToEth If claimed wETH should be converted to ETH.
      */
     function handleRewards(
-        bool _shouldClaimBws,
+        bool _shouldClaimBwlk,
         bool _shouldStakeMultiplierPoints,
         bool _shouldClaimWeth,
         bool _shouldConvertWethToEth
     ) external nonReentrant {
         address account = msg.sender;
 
-        if (_shouldClaimBws) {
-            IRewardTracker(stakedBwsTracker).claimForAccount(account, account);
+        if (_shouldClaimBwlk) {
+            IRewardTracker(stakedBwlkTracker).claimForAccount(account, account);
         }
         if (_shouldStakeMultiplierPoints) {
-            uint256 bnBwsAmount = IRewardTracker(bonusBwsTracker).claimForAccount(account, account);
-            if (bnBwsAmount > 0) {
-                IRewardTracker(feeBwsTracker).stakeForAccount(account, account, bnBws, bnBwsAmount);
+            uint256 bnBwlkAmount = IRewardTracker(bonusBwlkTracker).claimForAccount(account, account);
+            if (bnBwlkAmount > 0) {
+                IRewardTracker(feeBwlkTracker).stakeForAccount(account, account, bnBwlk, bnBwlkAmount);
             }
         }
         if (_shouldClaimWeth) {
             if (_shouldConvertWethToEth) {
-                uint256 wsAmount = IRewardTracker(feeBwsTracker).claimForAccount(account, address(this));
+                uint256 wsAmount = IRewardTracker(feeBwlkTracker).claimForAccount(account, address(this));
 
                 IWETH(weth).withdraw(wsAmount);
 
                 payable(account).sendValue(wsAmount);
             } else {
-                IRewardTracker(feeBwsTracker).claimForAccount(account, account);
+                IRewardTracker(feeBwlkTracker).claimForAccount(account, account);
             }
         }
     }
 
-    // Internal functions to stake and unstake BWS
+    // Internal functions to stake and unstake BWLK
 
-    function _stakeBws(address _fundingAccount, address _account, address _token, uint256 _amount) private {
+    function _stakeBwlk(address _fundingAccount, address _account, address _token, uint256 _amount) private {
         require(_amount > 0, "RewardRouter: invalid _amount");
         require(!IVoter(voter).finalizationInProgress(), "RewardRouter: voter epoch finalization in progress");
 
-        IRewardTracker(stakedBwsTracker).stakeForAccount(_fundingAccount, _account, _token, _amount);
-        IRewardTracker(bonusBwsTracker).stakeForAccount(_account, _account, stakedBwsTracker, _amount);
-        IRewardTracker(feeBwsTracker).stakeForAccount(_account, _account, bonusBwsTracker, _amount);
+        IRewardTracker(stakedBwlkTracker).stakeForAccount(_fundingAccount, _account, _token, _amount);
+        IRewardTracker(bonusBwlkTracker).stakeForAccount(_account, _account, stakedBwlkTracker, _amount);
+        IRewardTracker(feeBwlkTracker).stakeForAccount(_account, _account, bonusBwlkTracker, _amount);
 
         emit StakeGmx(_account, _token, _amount);
     }
 
-    function _unstakeBws(address _account, address _token, uint256 _amount, bool _shouldReduceBnBws) private {
+    function _unstakeBwlk(address _account, address _token, uint256 _amount, bool _shouldReduceBnBwlk) private {
         require(_amount > 0, "RewardRouter: invalid _amount");
 
-        uint256 balance = IRewardTracker(stakedBwsTracker).stakedAmounts(_account);
+        uint256 balance = IRewardTracker(stakedBwlkTracker).stakedAmounts(_account);
 
-        IRewardTracker(feeBwsTracker).unstakeForAccount(_account, bonusBwsTracker, _amount, _account);
-        IRewardTracker(bonusBwsTracker).unstakeForAccount(_account, stakedBwsTracker, _amount, _account);
-        IRewardTracker(stakedBwsTracker).unstakeForAccount(_account, _token, _amount, _account);
+        IRewardTracker(feeBwlkTracker).unstakeForAccount(_account, bonusBwlkTracker, _amount, _account);
+        IRewardTracker(bonusBwlkTracker).unstakeForAccount(_account, stakedBwlkTracker, _amount, _account);
+        IRewardTracker(stakedBwlkTracker).unstakeForAccount(_account, _token, _amount, _account);
 
-        if (_shouldReduceBnBws) {
-            uint256 bnBwsAmount = IRewardTracker(bonusBwsTracker).claimForAccount(_account, _account);
-            if (bnBwsAmount > 0) {
-                IRewardTracker(feeBwsTracker).stakeForAccount(_account, _account, bnBws, bnBwsAmount);
+        if (_shouldReduceBnBwlk) {
+            uint256 bnBwlkAmount = IRewardTracker(bonusBwlkTracker).claimForAccount(_account, _account);
+            if (bnBwlkAmount > 0) {
+                IRewardTracker(feeBwlkTracker).stakeForAccount(_account, _account, bnBwlk, bnBwlkAmount);
             }
 
-            uint256 stakedBnBws = IRewardTracker(feeBwsTracker).depositBalances(_account, bnBws);
-            if (stakedBnBws > 0) {
-                uint256 reductionAmount = stakedBnBws.mul(_amount).div(balance);
-                IRewardTracker(feeBwsTracker).unstakeForAccount(_account, bnBws, reductionAmount, _account);
-                IMintable(bnBws).burn(_account, reductionAmount);
+            uint256 stakedBnBwlk = IRewardTracker(feeBwlkTracker).depositBalances(_account, bnBwlk);
+            if (stakedBnBwlk > 0) {
+                uint256 reductionAmount = stakedBnBwlk.mul(_amount).div(balance);
+                IRewardTracker(feeBwlkTracker).unstakeForAccount(_account, bnBwlk, reductionAmount, _account);
+                IMintable(bnBwlk).burn(_account, reductionAmount);
             }
         }
 
         emit UnstakeGmx(_account, _token, _amount);
-    }
-
-    // Account transfer functions
-
-    function signalTransfer(address _receiver) external nonReentrant {
-        _validateReceiver(_receiver);
-        pendingReceivers[msg.sender] = _receiver;
-    }
-
-    function acceptTransfer(address _sender) external nonReentrant {
-        address receiver = msg.sender;
-        require(pendingReceivers[_sender] == receiver, "RewardRouter: transfer not signalled");
-        delete pendingReceivers[_sender];
-
-        _validateReceiver(receiver);
-        _compound(_sender);
-
-        uint256 stakedBws = IRewardTracker(stakedBwsTracker).depositBalances(_sender, bws);
-        if (stakedBws > 0) {
-            _unstakeBws(_sender, bws, stakedBws, false);
-            _stakeBws(_sender, receiver, bws, stakedBws);
-        }
-
-        uint256 stakedBnBws = IRewardTracker(feeBwsTracker).depositBalances(_sender, bnBws);
-        if (stakedBnBws > 0) {
-            IRewardTracker(feeBwsTracker).unstakeForAccount(_sender, bnBws, stakedBnBws, _sender);
-            IRewardTracker(feeBwsTracker).stakeForAccount(_sender, receiver, bnBws, stakedBnBws);
-        }
-    }
-
-    function _validateReceiver(address _receiver) private view {
-        require(IRewardTracker(stakedBwsTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: stakedBwsTracker.averageStakedAmounts > 0");
-        require(IRewardTracker(stakedBwsTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: stakedBwsTracker.cumulativeRewards > 0");
-
-        require(IRewardTracker(bonusBwsTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: bonusBwsTracker.averageStakedAmounts > 0");
-        require(IRewardTracker(bonusBwsTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: bonusBwsTracker.cumulativeRewards > 0");
-
-        require(IRewardTracker(feeBwsTracker).averageStakedAmounts(_receiver) == 0, "RewardRouter: feeBwsTracker.averageStakedAmounts > 0");
-        require(IRewardTracker(feeBwsTracker).cumulativeRewards(_receiver) == 0, "RewardRouter: feeBwsTracker.cumulativeRewards > 0");
-    }
-
-    function _compound(address _account) private {
-        uint256 bnBwsAmount = IRewardTracker(bonusBwsTracker).claimForAccount(_account, _account);
-        if (bnBwsAmount > 0) {
-            IRewardTracker(feeBwsTracker).stakeForAccount(_account, _account, bnBws, bnBwsAmount);
-        }
     }
 }

@@ -60,7 +60,7 @@ task("accounts", "Prints the list of accounts", async () => {
  * @type import('hardhat/config').HardhatUserConfig
  */
 module.exports = {
-  defaultNetwork: "arbitrum",
+  defaultNetwork: "mainnet",
   networks: {
     localhost: {
       timeout: 120000
@@ -106,7 +106,8 @@ module.exports = {
     },
     mainnet: {
       url: MAINNET_URL,
-      gasPrice: 50000000000,
+      gasMultiplier: 1.2,
+      chainId: 1,
       accounts: [MAINNET_DEPLOY_KEY]
     },
     fantom: {
